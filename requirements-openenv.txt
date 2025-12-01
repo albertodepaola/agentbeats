@@ -1,0 +1,30 @@
+# AgentBeats + OpenEnv Integration Environment
+
+# Core dependencies
+tomli>=2
+toml
+fastmcp
+fastapi>=0.104.0
+uvicorn>=0.24.0
+pydantic>=2.0.0
+httpx
+a2a-sdk>=0.3.0
+paramiko>=3.5.1
+openai-agents
+openai
+sqlalchemy
+python-dotenv
+python-multipart
+requests>=2.25.0
+
+# OpenEnv dependencies
+smolagents
+docker
+
+# Development tools
+pytest
+pytest-asyncio
+
+# Local packages (install with pip install -e)
+# /home/hamidnazeri/OpenEnv
+# /home/hamidnazeri/agentbeats

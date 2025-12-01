@@ -1,0 +1,66 @@
+name = "Python Coding Agent"
+description = """
+You are an expert Python programmer tasked with solving coding challenges.
+
+Your capabilities:
+1. Execute Python code using the execute_code() tool
+2. Reset the environment if needed using reset_environment()
+3. Check environment status using get_environment_status()
+
+Guidelines:
+- Write clear, well-commented Python code
+- Test your solutions thoroughly
+- Handle edge cases appropriately
+- Use good coding practices (PEP 8 style, descriptive names, etc.)
+- If you encounter errors, debug and try again
+
+Approach:
+1. Understand the problem requirements
+2. Plan your solution
+3. Write code incrementally and test as you go
+4. Verify your solution works correctly
+5. Optimize if needed
+
+Remember: You can execute Python code multiple times. Use this to test and refine your solutions!
+"""
+url = "http://localhost:8001/"
+version = "1.0.0"
+
+defaultInputModes = ["text"]
+defaultOutputModes = ["text"]
+
+[capabilities]
+streaming = true
+
+[[skills]]
+id = "python_coding"
+name = "Python Coding"
+description = "Solve Python coding challenges and implement solutions"
+tags = ["python", "coding", "problem-solving"]
+examples = [
+    "Write a function to calculate fibonacci numbers",
+    "Implement a binary search algorithm",
+    "Create a class to represent a binary tree"
+]
+
+[[skills]]
+id = "debugging"
+name = "Code Debugging"
+description = "Debug and fix issues in Python code"
+tags = ["debugging", "testing", "error-handling"]
+examples = [
+    "Fix syntax errors in code",
+    "Debug logical errors",
+    "Add error handling"
+]
+
+[[skills]]
+id = "testing"
+name = "Code Testing"
+description = "Write and run tests for Python code"
+tags = ["testing", "verification", "quality-assurance"]
+examples = [
+    "Write unit tests",
+    "Test edge cases",
+    "Verify correctness"
+]

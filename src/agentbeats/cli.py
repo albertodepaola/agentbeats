@@ -11,6 +11,7 @@ import signal
 import atexit
 import uvicorn
 import os
+from typing import Optional
 
 from .agent_executor import *
 from .agent_launcher import *
@@ -450,6 +451,130 @@ def _run_agent(card_path: str,
             agent.add_mcp_server(url)
     agent.run()
 
+
+def _run_openenv_eval(
+    agent_card: str,
+    env_name: str,
+    docker_image: Optional[str],
+    num_episodes: int,
+    model_type: str,
+    model_name: str,
+    output_dir: Optional[str],
+    tool_files: list[str],
+    mcp_urls: list[str],
+):
+    """
+    Run OpenEnv evaluation on an agent.
+
+    This function evaluates an AgentBeats agent on an OpenEnv environment
+    for multiple episodes and collects metrics.
+    """
+    print(f"\n{'=' * 60}")
+    print("AgentBeats + OpenEnv Evaluation")
+    print(f"{'=' * 60}\n")
+
+    try:
+        # Import OpenEnv integration modules
+        from .integrations.openenv import OpenEnvAdapter, OpenEnvEvaluator
+
+        # Set default docker image if not provided
+        if not docker_image:
+            docker_image = f"{env_name}:latest"
+
+        # Set default output directory if not provided
+        if not output_dir:
+            output_dir = "./eval_results"
+
+        print(f"Agent Card: {agent_card}")
+        print(f"Environment: {env_name}")
+        print(f"Docker Image: {docker_image}")
+        print(f"Episodes: {num_episodes}")
+        print(f"Model: {model_type}/{model_name}")
+        print(f"Output Dir: {output_dir}\n")
+
+        # Create OpenEnv adapter
+        print("Initializing OpenEnv environment...")
+        adapter = OpenEnvAdapter(
+            env_name=env_name,
+            docker_image=docker_image,
+            auto_start=True,
+        )
+
+        # Import tool files
+        print("Loading custom tools...")
+        for file in tool_files:
+            _import_tool_file(file)
+
+        # Get tools from OpenEnv adapter
+        openenv_tools = adapter.get_tools()
+        print(f"Loaded {len(openenv_tools)} OpenEnv environment tools")
+
+        # Create agent with OpenEnv tools
+        print("Creating agent...")
+        agent = BeatsAgent(
+            name="OpenEnv Evaluation Agent",
+            agent_host="localhost",
+            agent_port=8001,
+            model_type=model_type,
+            model_name=model_name,
+        )
+
+        # Register all tools
+        for func in get_registered_tools():
+            agent.register_tool(func)
+
+        for tool in openenv_tools:
+            agent.register_tool(tool)
+
+        # Load agent card
+        agent.load_agent_card(agent_card)
+
+        # Add MCP servers if specified
+        for url in mcp_urls:
+            if url:
+                agent.add_mcp_server(url)
+
+        print("\nAgent configured successfully!")
+
+        # Create evaluator
+        print("\nCreating evaluator...")
+        evaluator = OpenEnvEvaluator(
+            adapter=adapter,
+            agent_name=agent.name,
+            num_episodes=num_episodes,
+            output_dir=pathlib.Path(output_dir),
+        )
+
+        # Run evaluation
+        print("\n" + "=" * 60)
+        print("Starting Evaluation...")
+        print("=" * 60 + "\n")
+
+        results = evaluator.run(agent_runner=agent)
+
+        # Results summary is printed by evaluator.run()
+        print(f"\nResults saved to: {output_dir}")
+
+        # Cleanup
+        print("\nCleaning up...")
+        adapter.close()
+
+        print("\nEvaluation completed successfully!")
+        return 0
+
+    except ImportError as e:
+        print(f"\n❌ Error: Could not import OpenEnv integration modules.")
+        print(f"Make sure OpenEnv is installed and accessible.")
+        print(f"Details: {e}\n")
+        return 1
+
+    except Exception as e:
+        print(f"\n❌ Evaluation failed: {e}")
+        import traceback
+        traceback.print_exc()
+        return 1
+
+
 def main():
     # add support for "agentbeats run_agent ..."
     parser = argparse.ArgumentParser(prog="agentbeats")
@@ -536,6 +661,29 @@ def main():
     deploy_parser.add_argument("--supabase_auth", action="store_true", help="Enable Supabase authentication (default: use dev login mode)")
     deploy_parser.add_argument("--public_url", help="Public URL for backend (e.g., http://yourdomain.com:9000).", default=None)
 
+    # run_openenv_eval command
+    openenv_eval_parser = sub_parser.add_parser("run_openenv_eval",
+                                                help="Evaluate an agent on OpenEnv environment")
+    openenv_eval_parser.add_argument("--agent_card", required=True,
+                                     help="Path to agent card TOML file")
+    openenv_eval_parser.add_argument("--env", required=True,
+                                     choices=["coding_env", "openspiel_env", "git_env"],
+                                     help="OpenEnv environment name")
+    openenv_eval_parser.add_argument("--docker_image",
+                                     help="Docker image for the environment (default: <env>:latest)")
+    openenv_eval_parser.add_argument("--num_episodes", type=int, default=10,
+                                     help="Number of episodes to run (default: 10)")
+    openenv_eval_parser.add_argument("--model_type", default="openai",
+                                     help="Model type (default: openai)")
+    openenv_eval_parser.add_argument("--model_name", default="gpt-4o-mini",
+                                     help="Model name (default: gpt-4o-mini)")
+    openenv_eval_parser.add_argument("--output_dir",
+                                     help="Directory to save results (default: ./eval_results)")
+    openenv_eval_parser.add_argument("--tool", action="append", default=[],
+                                     help="Additional tool files")
+    openenv_eval_parser.add_argument("--mcp", action="append", default=[],
+                                     help="MCP server URLs")
+
     # check command
     check_parser = sub_parser.add_parser("check", help="Check AgentBeats environment setup")
 
@@ -594,5 +742,18 @@ def main():
                    frontend_port=args.frontend_port, mcp_port=args.mcp_port, 
                    launch_mode=args.launch_mode, supabase_auth=args.supabase_auth, public_url=args.public_url)
     
+    elif args.cmd == "run_openenv_eval":
+        _run_openenv_eval(
+            agent_card=args.agent_card,
+            env_name=args.env,
+            docker_image=args.docker_image,
+            num_episodes=args.num_episodes,
+            model_type=args.model_type,
+            model_name=args.model_name,
+            output_dir=args.output_dir,
+            tool_files=args.tool,
+            mcp_urls=args.mcp,
+        )
+
     elif args.cmd == "check":
         _check_environment()

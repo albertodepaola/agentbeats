@@ -1,0 +1,47 @@
+name: agentbeats-openenv
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python version
+  - python=3.11
+
+  # Core dependencies from AgentBeats
+  - pip
+  - setuptools>=68
+  - wheel
+
+  # FastAPI & web framework (shared)
+  - fastapi>=0.104.0
+  - uvicorn>=0.24.0
+  - pydantic>=2.0.0
+  - httpx
+
+  # Development tools
+  - pytest
+  - pytest-asyncio
+
+  # Pip dependencies
+  - pip:
+      # AgentBeats specific
+      - tomli>=2
+      - toml
+      - fastmcp
+      - a2a-sdk>=0.3.0
+      - paramiko>=3.5.1
+      - openai-agents
+      - openai
+      - sqlalchemy
+      - python-dotenv
+      - python-multipart
+
+      # OpenEnv core (install from local path)
+      - -e /home/hamidnazeri/OpenEnv
+
+      # OpenEnv coding_env dependencies
+      - smolagents
+      - docker
+      - requests>=2.25.0
+
+      # AgentBeats (install from local path in dev mode)
+      - -e /home/hamidnazeri/agentbeats
