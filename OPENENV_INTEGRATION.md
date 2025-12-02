@@ -100,6 +100,68 @@ agentbeats run_openenv_eval \
   --output_dir ./results
 ```
 
+## 💡 CLI Design: Why `run_openenv_eval`?
+
+You might wonder: why a new CLI command instead of using existing ones like `run_agent` or `run_scenario`?
+
+### Existing Commands vs OpenEnv Evaluation
+
+AgentBeats has two main paradigms:
+
+**1. Agent-as-Service** (`run_agent`, `run`)
+- Runs agents as long-running services
+- Waits for requests indefinitely
+- No evaluation loop or metrics
+- Example: `agentbeats run_agent card.toml` → blocks forever
+
+**2. Multi-Agent Battles** (`load_scenario`, `run_scenario`)
+- Agent vs agent competitions
+- Requires backend + frontend + database
+- Web UI for watching battles
+- Designed for interactive, multi-agent scenarios
+
+### OpenEnv Needs Something Different
+
+OpenEnv evaluation requires:
+- ✅ **Episode-based evaluation** - Run N episodes, collect metrics
+- ✅ **Environment lifecycle** - Start/stop Docker containers
+- ✅ **Metrics aggregation** - Average reward, success rate, step counts
+- ✅ **Standalone operation** - No backend/frontend required
+- ✅ **Benchmark focus** - Agent vs standardized RL environments
+
+**Comparison:**
+
+| Feature | `run_agent` | `run_scenario` | `run_openenv_eval` |
+|---------|-------------|----------------|-------------------|
+| **Mode** | Service (blocks) | Battle UI | Episode evaluation |
+| **Agents** | Single | Multiple | Single |
+| **Environment** | None | Battle arena | OpenEnv (Docker) |
+| **Metrics** | None | Battle results | Episode metrics |
+| **Dependencies** | Agent only | Backend+Frontend | Docker+OpenEnv |
+| **Output** | Logs | Web UI replay | JSON results |
+
+### Different Execution Patterns
+
+```python
+# Existing: run_agent
+agent.run()  # Runs forever, waits for requests
+
+# New: run_openenv_eval
+for episode in range(num_episodes):
+    env.reset()
+    while not done:
+        obs, reward, done = env.step(action)
+    save_metrics(episode)
+```
+
+### Result: Clean Separation
+
+AgentBeats now supports both paradigms:
+- **Multi-agent battles** → `run_scenario`
+- **Single-agent benchmarking** → `run_openenv_eval`
+
+This follows common ML patterns (like `train.py` vs `eval.py`) and keeps each command focused on one use case.
+
 ## 📚 Components
 
 ### 1. OpenEnv Adapter (`src/agentbeats/integrations/openenv/`)
