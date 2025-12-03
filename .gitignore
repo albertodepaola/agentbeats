@@ -146,3 +146,5 @@ asciinema_playground
 .venv-openenv/
 
 eval_results/
+
+CLAUDE.md
