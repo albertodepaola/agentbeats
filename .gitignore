@@ -144,3 +144,5 @@ asciinema_playground
 **/asciinema_outputs/
 
 .venv-openenv/
+
+eval_results/
