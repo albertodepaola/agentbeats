@@ -34,12 +34,12 @@ def tool(func=None):
     def _decorator(func):
         _TOOL_REGISTRY.append(func)
 
+        # Use functools.wraps to properly preserve the signature
+        import functools
+
+        @functools.wraps(func)
         def wrapper(*args, **kwargs):
             return func(*args, **kwargs)
-
-        wrapper.__name__ = func.__name__  # keep function name
-        wrapper.__doc__ = func.__doc__    # keep docstring
-        wrapper.__module__ = func.__module__  # preserve module info
 
         return wrapper
 

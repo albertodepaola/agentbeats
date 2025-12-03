@@ -506,33 +506,21 @@ def _run_openenv_eval(
             _import_tool_file(file)
 
         # Get tools from OpenEnv adapter
+        # Note: These tools use @agentbeats.tool decorator, so they're automatically
+        # added to the global registry. We call get_tools() just to trigger creation.
         openenv_tools = adapter.get_tools()
         print(f"Loaded {len(openenv_tools)} OpenEnv environment tools")
 
-        # Create agent with OpenEnv tools
-        print("Creating agent...")
-        agent = BeatsAgent(
-            name="OpenEnv Evaluation Agent",
-            agent_host="localhost",
-            agent_port=8001,
-            model_type=model_type,
-            model_name=model_name,
-        )
-
-        # Register all tools
-        for func in get_registered_tools():
-            agent.register_tool(func)
-
-        for tool in openenv_tools:
-            agent.register_tool(tool)
+        # Collect all tools (OpenEnv tools already in registry via @agentbeats.tool)
+        all_tools = list(get_registered_tools())
+        print(f"Total tools available: {len(all_tools)}")
+        print(f"Tool names: {[t.__name__ for t in all_tools]}")
 
         # Load agent card
-        agent.load_agent_card(agent_card)
-
-        # Add MCP servers if specified
-        for url in mcp_urls:
-            if url:
-                agent.add_mcp_server(url)
+        print("Loading agent card...")
+        with open(agent_card, "rb") as f:
+            import tomllib
+            agent_card_json = tomllib.load(f)
 
         print("\nAgent configured successfully!")
 
@@ -540,7 +528,7 @@ def _run_openenv_eval(
         print("\nCreating evaluator...")
         evaluator = OpenEnvEvaluator(
             adapter=adapter,
-            agent_name=agent.name,
+            agent_name=agent_card_json.get("name", "OpenEnv Evaluation Agent"),
             num_episodes=num_episodes,
             output_dir=pathlib.Path(output_dir),
         )
@@ -550,7 +538,14 @@ def _run_openenv_eval(
         print("Starting Evaluation...")
         print("=" * 60 + "\n")
 
-        results = evaluator.run(agent_runner=agent)
+        # Pass parameters instead of pre-created executor
+        results = evaluator.run(
+            agent_card_json=agent_card_json,
+            model_type=model_type,
+            model_name=model_name,
+            tool_list=all_tools,
+            mcp_url_list=mcp_urls if mcp_urls else [],
+        )
 
         # Results summary is printed by evaluator.run()
         print(f"\nResults saved to: {output_dir}")

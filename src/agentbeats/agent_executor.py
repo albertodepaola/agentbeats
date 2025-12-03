@@ -97,6 +97,31 @@ def create_agent(
         print("[AgentBeats] Using OpenAI model:", model_name)
         return Agent(**agent_args, model=model_name)
 
+    # google/gemini agents via OpenAI-compatible API, e.g. "gemini-1.5-flash"
+    elif model_type == "google":
+        GOOGLE_API_KEY = os.getenv(
+            "GOOGLE_API_KEY"
+        ).strip()  # in case of empty \n
+        if not GOOGLE_API_KEY:
+            raise ValueError("GOOGLE_API_KEY is not set")
+
+        print("[AgentBeats] Using Google Gemini model:", model_name)
+        set_tracing_disabled(True)  # Disable tracing for Google models
+        os.environ["OPENAI_TRACING_V2"] = "false"
+
+        # Google's OpenAI-compatible endpoint
+        google_client = AsyncOpenAI(
+            base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+            api_key=GOOGLE_API_KEY
+        )
+        google_model_provider = GoogleModelProvider()
+        return Agent(
+            **agent_args,
+            model=google_model_provider.get_model(
+                model_name, google_client
+            ),
+        )
+
     # openrouter agents, e.g. "anthropic/claude-3.5-sonnet"
     elif model_type == "openrouter":
         OPENROUTER_API_KEY = os.getenv(
@@ -122,6 +147,17 @@ def create_agent(
     # no matching agents
     else:
         raise ValueError(f"Unsupported model type: {model_type}.")
+
+
+class GoogleModelProvider(ModelProvider):
+    """Provider for Google Gemini models via OpenAI-compatible API."""
+
+    def get_model(
+        self, model_name: str, google_client: AsyncOpenAI
+    ) -> Model:
+        return OpenAIChatCompletionsModel(
+            model=model_name, openai_client=google_client
+        )
 
 
 class OpenRouterModelProvider(ModelProvider):
@@ -372,13 +408,20 @@ class AgentBeatsExecutor(AgentExecutor):
     async def _init_agent_and_mcp(self):
         """Initialize the main agent with the provided tools and MCP servers."""
 
+        logger.info(f"Initializing agent with {len(self.tool_list)} tools")
+        logger.debug(f"Tool list: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in self.tool_list]}")
+
         # Register tools
         for tool_index in range(len(self.tool_list)):
             tool = self.tool_list[tool_index]
             tool_name = tool.__name__
+            logger.debug(f"Wrapping tool {tool_index}: {tool_name}")
             logged_tool = self._wrap_tool_with_logging(tool)
             wrapped = function_tool(name_override=tool_name)(logged_tool)
             self.tool_list[tool_index] = wrapped
+            logger.debug(f"Tool {tool_name} wrapped successfully")
+
+        logger.info(f"Successfully wrapped {len(self.tool_list)} tools")
 
         # Connect to all MCP servers
         for mcp_server in self.mcp_list:
@@ -418,12 +461,22 @@ class AgentBeatsExecutor(AgentExecutor):
             }
         ]
 
+        logger.info(f"Invoking agent with query context: {len(query_ctx)} messages")
+        logger.debug(f"Query context: {json.dumps(query_ctx, indent=2)}")
+
+        # Log tools available to agent
+        if self.main_agent and hasattr(self.main_agent, 'tools'):
+            logger.info(f"Agent has {len(self.main_agent.tools)} tools available")
+            tool_names = [t.name if hasattr(t, 'name') else str(t) for t in self.main_agent.tools]
+            logger.info(f"Tool names: {tool_names}")
+
         result = await Runner.run(self.main_agent, query_ctx, max_turns=30)
         self.chat_history = result.to_input_list()
         # print(self.chat_history)
 
         # print agent output
         print(f"[AgentBeatsExecutor] Agent output: {result.final_output}")
+        logger.info(f"Agent completed with {len(result.to_input_list())} messages in history")
 
         return result.final_output
 

@@ -5,13 +5,13 @@ This module provides an evaluation harness for running AgentBeats agents
 on OpenEnv environments and collecting performance metrics.
 """
 
-import logging
 import json
+import logging
 import time
-from pathlib import Path
-from typing import Optional, Dict, Any, List
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
+from typing import Any, Dict, List, Optional
 
 from .openenv_adapter import OpenEnvAdapter
 
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class EpisodeResult:
     """Results from a single episode."""
+
     episode_id: str
     total_reward: float
     step_count: int
@@ -37,6 +38,7 @@ class EpisodeResult:
 @dataclass
 class EvaluationResults:
     """Aggregated results from multiple episodes."""
+
     env_name: str
     agent_name: str
     num_episodes: int
@@ -57,7 +59,7 @@ class EvaluationResults:
     def save_to_file(self, filepath: Path) -> None:
         """Save results to a JSON file."""
         filepath.parent.mkdir(parents=True, exist_ok=True)
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
         logger.info(f"Saved evaluation results to {filepath}")
 
@@ -78,8 +80,10 @@ class EvaluationResults:
             print("-" * 60)
             for i, ep in enumerate(self.episodes, 1):
                 status = "✓" if ep.success else "✗"
-                print(f"  Episode {i}: {status} Reward={ep.total_reward:.2f}, "
-                      f"Steps={ep.step_count}, Duration={ep.duration_seconds:.1f}s")
+                print(
+                    f"  Episode {i}: {status} Reward={ep.total_reward:.2f}, "
+                    f"Steps={ep.step_count}, Duration={ep.duration_seconds:.1f}s"
+                )
                 if ep.error:
                     print(f"    Error: {ep.error}")
             print("=" * 60 + "\n")
@@ -127,17 +131,17 @@ class OpenEnvEvaluator:
             f"{num_episodes} episodes"
         )
 
-    def run_episode(
+    async def run_episode_async(
         self,
         episode_num: int,
-        agent_runner: Any,
+        agent_executor: Any,
     ) -> EpisodeResult:
         """
-        Run a single evaluation episode.
+        Run a single evaluation episode asynchronously.
 
         Args:
             episode_num: Episode number (for logging)
-            agent_runner: AgentBeats agent runner instance
+            agent_executor: AgentBeats executor instance with invoke_agent method
 
         Returns:
             EpisodeResult containing episode metrics
@@ -153,23 +157,39 @@ class OpenEnvEvaluator:
             # Get initial observation
             initial_obs = reset_result.get("observation")
 
+            # DEBUG: Log the structure of the observation
+            logger.info(f"Reset result keys: {reset_result.keys()}")
+            logger.info(f"Initial observation type: {type(initial_obs)}")
+            logger.info(f"Initial observation: {initial_obs}")
+            if hasattr(initial_obs, '__dict__'):
+                logger.info(f"Observation attributes: {initial_obs.__dict__}")
+            logger.info(f"Has 'message' attr: {hasattr(initial_obs, 'message')}")
+
             # Create initial message for agent
-            if hasattr(initial_obs, 'message'):
+            if hasattr(initial_obs, "message"):
                 initial_message = initial_obs.message
+                logger.info(f"Using observation.message: {initial_message}")
             else:
-                initial_message = f"Environment reset. Starting episode {episode_num}."
+                initial_message = f"Environment reset. Starting episode {episode_num}. Please solve the coding task."
+                logger.info(f"Using fallback message: {initial_message}")
 
-            # Run agent
-            # Note: This is a simplified version. In practice, you'd want to:
-            # 1. Send initial message to agent
-            # 2. Agent uses tools (which call env_manager.step())
-            # 3. Continue until episode is done or max steps reached
+            # Create a minimal context object that provides get_user_input()
+            # This is all that invoke_agent() actually needs
+            class SimpleContext:
+                def __init__(self, message: str):
+                    self._message = message
+                    self.current_task = None
 
-            step_count = 0
-            done = False
-            error_msg = None
+                def get_user_input(self, delimiter: str = '\n') -> str:
+                    return self._message
 
-            # Get final state
+            mock_context = SimpleContext(initial_message)
+
+            # Run agent - this will cause the agent to use tools and interact with environment
+            logger.info(f"Invoking agent with message: {initial_message}")
+            await agent_executor.invoke_agent(mock_context)
+
+            # Get final state after agent execution
             final_state = self.adapter.get_state()
             total_reward = final_state.get("total_reward", 0.0)
             step_count = final_state.get("step_count", 0)
@@ -185,7 +205,7 @@ class OpenEnvEvaluator:
                 step_count=step_count,
                 success=success,
                 duration_seconds=duration,
-                error=error_msg,
+                error=None,
                 metadata={
                     "episode_num": episode_num,
                     "final_state": final_state,
@@ -203,6 +223,8 @@ class OpenEnvEvaluator:
         except Exception as e:
             duration = time.time() - start_time
             logger.error(f"Episode {episode_num} failed: {e}")
+            import traceback
+            traceback.print_exc()
 
             return EpisodeResult(
                 episode_id=f"episode_{episode_num}",
@@ -213,12 +235,49 @@ class OpenEnvEvaluator:
                 error=str(e),
             )
 
-    def run(self, agent_runner: Optional[Any] = None) -> EvaluationResults:
+    def run_episode(
+        self,
+        episode_num: int,
+        agent_executor: Any,
+    ) -> EpisodeResult:
+        """
+        Synchronous wrapper for run_episode_async.
+
+        Args:
+            episode_num: Episode number (for logging)
+            agent_executor: AgentBeats executor instance
+
+        Returns:
+            EpisodeResult containing episode metrics
+        """
+        import asyncio
+
+        # Get or create event loop
+        try:
+            loop = asyncio.get_running_loop()
+            # If we're already in an event loop, we need to create a task
+            # This shouldn't happen in normal usage, but handle it gracefully
+            future = asyncio.ensure_future(
+                self.run_episode_async(episode_num, agent_executor)
+            )
+            return loop.run_until_complete(future)
+        except RuntimeError:
+            # No running loop, create one
+            return asyncio.run(
+                self.run_episode_async(episode_num, agent_executor)
+            )
+
+    def run(self, agent_card_json: Dict[str, Any], model_type: str, model_name: str,
+            tool_list: List[Any], mcp_url_list: List[str]) -> EvaluationResults:
         """
         Run the full evaluation.
 
         Args:
-            agent_runner: AgentBeats agent runner instance (optional for now)
+            agent_card_json: Agent card configuration
+            model_type: Model type (e.g., "google", "openai")
+            model_name: Model name (e.g., "gemini-2.5-flash")
+            tool_list: List of tool functions
+            mcp_url_list: List of MCP server URLs
 
         Returns:
             EvaluationResults containing aggregated metrics
@@ -229,7 +288,18 @@ class OpenEnvEvaluator:
         self.episode_results = []
 
         for episode_num in range(1, self.num_episodes + 1):
-            result = self.run_episode(episode_num, agent_runner)
+            # Create a fresh executor for each episode to avoid state issues
+            from agentbeats.agent_executor import AgentBeatsExecutor
+
+            executor = AgentBeatsExecutor(
+                agent_card_json=agent_card_json,
+                model_type=model_type,
+                model_name=model_name,
+                mcp_url_list=mcp_url_list,
+                tool_list=tool_list.copy(),  # Copy to avoid mutation
+            )
+
+            result = self.run_episode(episode_num, executor)
             self.episode_results.append(result)
 
         total_duration = time.time() - eval_start_time
@@ -240,7 +310,9 @@ class OpenEnvEvaluator:
         # Save results if output directory specified
         if self.output_dir:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"eval_{self.adapter.env_name}_{self.agent_name}_{timestamp}.json"
+            filename = (
+                f"eval_{self.adapter.env_name}_{self.agent_name}_{timestamp}.json"
+            )
             results.save_to_file(self.output_dir / filename)
 
         # Print summary

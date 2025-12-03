@@ -60,6 +60,85 @@ Results will be saved to `./eval_results/coding_env/` as JSON files with metrics
 - Steps per episode
 - Total duration
 
+## Using Google Gemini Models
+
+You can use Google's Gemini models through Google AI Studio API as an alternative to OpenAI.
+
+### 1. Setup Google AI Studio API Key
+
+Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey), then set it:
+
+```bash
+export GOOGLE_API_KEY="your-google-api-key"
+export GOOGLE_API_KEY="AIzaSyC_v96rkDExSlPQox8W06ejqHXBR-swZlU"
+
+```
+
+### 2. Run with Gemini Models
+
+```bash
+agentbeats run_openenv_eval \
+  --agent_card scenarios/openenv/coding_env_scenario/coding_agent_card.toml \
+  --env coding_env \
+  --num_episodes 5 \
+  --model_type google \
+  --model_name gemini-2.5-flash \
+  --output_dir ./eval_results/coding_env_gemini
+```
+
+
+### 4. Comparison Example
+
+Compare performance across models:
+
+```bash
+# Test with Gemini Flash
+agentbeats run_openenv_eval \
+  --agent_card scenarios/openenv/coding_env_scenario/coding_agent_card.toml \
+  --env coding_env \
+  --num_episodes 10 \
+  --model_type google \
+  --model_name gemini-1.5-flash \
+  --output_dir ./eval_results/gemini_flash
+
+# Test with OpenAI GPT-4o-mini
+agentbeats run_openenv_eval \
+  --agent_card scenarios/openenv/coding_env_scenario/coding_agent_card.toml \
+  --env coding_env \
+  --num_episodes 10 \
+  --model_type openai \
+  --model_name gpt-4o-mini \
+  --output_dir ./eval_results/gpt4o_mini
+
+# Compare results
+python -c "
+import json
+with open('./eval_results/gemini_flash/results.json') as f:
+    gemini = json.load(f)
+with open('./eval_results/gpt4o_mini/results.json') as f:
+    gpt = json.load(f)
+print(f'Gemini Flash: {gemini[\"avg_reward\"]:.2f} avg reward, {gemini[\"success_rate\"]*100:.1f}% success')
+print(f'GPT-4o-mini: {gpt[\"avg_reward\"]:.2f} avg reward, {gpt[\"success_rate\"]*100:.1f}% success')
+"
+```
+
+### 5. Troubleshooting Gemini
+
+**API Key Issues:**
+```bash
+# Verify key is set
+echo $GOOGLE_API_KEY
+
+# Test key validity
+curl -H "Content-Type: application/json" \
+  -d '{"contents":[{"parts":[{"text":"Hello"}]}]}' \
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$GOOGLE_API_KEY"
+```
+
+**Rate Limits:**
+- Free tier: 15 requests per minute
+- If you hit limits, reduce `--num_episodes` or add delays
+
 ## What the Agent Can Do
 
 The agent has access to these tools:
