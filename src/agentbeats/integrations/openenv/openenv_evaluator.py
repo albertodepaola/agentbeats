@@ -154,24 +154,16 @@ class OpenEnvEvaluator:
             reset_result = self.adapter.reset()
             episode_id = reset_result.get("episode_id", f"episode_{episode_num}")
 
-            # Get initial observation
-            initial_obs = reset_result.get("observation")
+            # Get task for this episode
+            from .sample_tasks import get_task, format_task_prompt
 
-            # DEBUG: Log the structure of the observation
-            logger.info(f"Reset result keys: {reset_result.keys()}")
-            logger.info(f"Initial observation type: {type(initial_obs)}")
-            logger.info(f"Initial observation: {initial_obs}")
-            if hasattr(initial_obs, '__dict__'):
-                logger.info(f"Observation attributes: {initial_obs.__dict__}")
-            logger.info(f"Has 'message' attr: {hasattr(initial_obs, 'message')}")
+            # Use episode number to select task (cyclic)
+            task = get_task(index=episode_num - 1)
+            initial_message = format_task_prompt(task, episode_num)
 
-            # Create initial message for agent
-            if hasattr(initial_obs, "message"):
-                initial_message = initial_obs.message
-                logger.info(f"Using observation.message: {initial_message}")
-            else:
-                initial_message = f"Environment reset. Starting episode {episode_num}. Please solve the coding task."
-                logger.info(f"Using fallback message: {initial_message}")
+            logger.info(f"Episode {episode_num} task: {task['id']}")
+            logger.info(f"Prompt length: {len(initial_message)} characters")
+            logger.debug(f"Full prompt:\n{initial_message}")
 
             # Create a minimal context object that provides get_user_input()
             # This is all that invoke_agent() actually needs
@@ -185,9 +177,15 @@ class OpenEnvEvaluator:
 
             mock_context = SimpleContext(initial_message)
 
-            # Run agent - this will cause the agent to use tools and interact with environment
-            logger.info(f"Invoking agent with message: {initial_message}")
-            await agent_executor.invoke_agent(mock_context)
+            # Run agent - agent should call execute_code() to solve the task
+            logger.info(f"Invoking agent to solve task: {task['id']}")
+            agent_response = await agent_executor.invoke_agent(mock_context)
+
+            # Capture the agent's conversation history
+            agent_chat_history = agent_executor.chat_history if hasattr(agent_executor, 'chat_history') else []
+            logger.info(f"Agent response: {agent_response}")
+            logger.info(f"Agent chat history length: {len(agent_chat_history)} messages")
+            logger.debug(f"Full chat history: {agent_chat_history}")
 
             # Get final state after agent execution
             final_state = self.adapter.get_state()
@@ -208,14 +206,19 @@ class OpenEnvEvaluator:
                 error=None,
                 metadata={
                     "episode_num": episode_num,
+                    "task_id": task["id"],
+                    "task_prompt": task["prompt"],
+                    "task_difficulty": task.get("difficulty", "unknown"),
+                    "agent_response": agent_response,
+                    "agent_chat_history": agent_chat_history,
                     "final_state": final_state,
                 },
             )
 
             logger.info(
                 f"Episode {episode_num} completed: "
-                f"reward={total_reward:.2f}, steps={step_count}, "
-                f"success={success}, duration={duration:.1f}s"
+                f"task={task['id']}, reward={total_reward:.2f}, "
+                f"steps={step_count}, success={success}, duration={duration:.1f}s"
             )
 
             return result

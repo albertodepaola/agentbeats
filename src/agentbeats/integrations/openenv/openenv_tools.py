@@ -39,34 +39,81 @@ def create_coding_env_tools(env_manager) -> List[Callable]:
             The execution result including stdout, stderr, and any return values
         """
         try:
+            logger.info("=" * 60)
+            logger.info("EXECUTE_CODE TOOL CALLED")
+            logger.info("=" * 60)
+            logger.info(f"Code length: {len(code)} characters")
+            logger.info("Code to execute:")
+            logger.info(code)
+            logger.info("-" * 60)
+
             # Import the action type
             from envs.coding_env import CodeAction
 
             # Create action and step
             action = CodeAction(code=code)
+            logger.info(f"Created CodeAction: {action}")
+
             result = env_manager.step(action)
+            logger.info(f"OpenEnv step() result keys: {result.keys()}")
+            logger.info(f"Reward from step: {result.get('reward', 'N/A')}")
+            logger.info(f"Done: {result.get('done', 'N/A')}")
 
             # Format the response
             obs = result["observation"]
+            logger.info(f"Observation type: {type(obs)}")
+            if hasattr(obs, '__dict__'):
+                logger.info(f"Observation attributes: {obs.__dict__}")
+
+            # Check what attributes the observation actually has
+            obs_attrs = dir(obs)
+            logger.info(f"Available observation attributes: {[attr for attr in obs_attrs if not attr.startswith('_')]}")
+
             response = f"Execution completed.\n"
 
-            if hasattr(obs, 'output') and obs.output:
+            # Check for stdout (primary attribute for CodingEnv)
+            if hasattr(obs, 'stdout') and obs.stdout:
+                logger.info(f"stdout from environment: {obs.stdout}")
+                response += f"Output:\n{obs.stdout}\n"
+            elif hasattr(obs, 'output') and obs.output:  # fallback for other env types
+                logger.info(f"Output from environment: {obs.output}")
                 response += f"Output:\n{obs.output}\n"
+            else:
+                logger.warning("No stdout or output in observation")
+                response += f"Output: (no output)\n"
 
-            if hasattr(obs, 'error') and obs.error:
+            # Check for stderr (primary attribute for CodingEnv errors)
+            if hasattr(obs, 'stderr') and obs.stderr:
+                logger.info(f"stderr from environment: {obs.stderr}")
+                response += f"Error:\n{obs.stderr}\n"
+            elif hasattr(obs, 'error') and obs.error:  # fallback for other env types
+                logger.info(f"Error from environment: {obs.error}")
                 response += f"Error:\n{obs.error}\n"
+            else:
+                logger.info("No stderr or error from environment")
 
             if hasattr(obs, 'success'):
+                logger.info(f"Success flag: {obs.success}")
                 response += f"Success: {obs.success}\n"
+            else:
+                logger.warning("Observation does not have 'success' attribute")
 
             response += f"Reward: {result['reward']}\n"
 
             if result['done']:
                 response += "Episode completed.\n"
 
+            logger.info(f"Response to agent (length={len(response)}):\n{response}")
+            logger.info("=" * 60)
+
+            # Additional validation
+            if len(response) < 50:
+                logger.error(f"Response seems too short! Only {len(response)} characters")
+
             return response
 
         except Exception as e:
+            logger.error(f"Error executing code: {e}", exc_info=True)
             return f"Error executing code: {str(e)}"
 
     @agentbeats.tool

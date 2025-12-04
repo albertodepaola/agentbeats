@@ -164,6 +164,77 @@ Reset the environment to start fresh (clears all previous state).
 ### 3. `get_environment_status()`
 Get current episode information (episode ID, step count, total reward).
 
+## Sample Coding Tasks
+
+The evaluation uses a built-in dataset of 10 diverse coding challenges that test different programming skills:
+
+1. **fibonacci** - Fibonacci number calculation (recursion/iteration)
+2. **reverse_string** - String reversal (string manipulation)
+3. **is_palindrome** - Palindrome checker (string checking with case/space handling)
+4. **sum_list** - List summation without built-in sum() (basic iteration)
+5. **find_maximum** - Find max value without built-in max() (comparison logic)
+6. **count_vowels** - Count vowels in string (string processing)
+7. **factorial** - Factorial calculation (recursion/iteration)
+8. **is_prime** - Prime number checker (mathematical logic)
+9. **binary_search** - Binary search implementation (algorithms)
+10. **merge_sorted_lists** - Merge two sorted lists (list manipulation)
+
+### Task Assignment
+
+Tasks are assigned cyclically across episodes:
+- Episode 1 → fibonacci
+- Episode 2 → reverse_string
+- Episode 3 → is_palindrome
+- Episode 4 → sum_list
+- ... and so on (cycles back to fibonacci after task 10)
+
+### Viewing Task Details
+
+You can inspect all available tasks programmatically:
+
+```python
+from agentbeats.integrations.openenv.sample_tasks import CODING_TASKS, get_task
+
+# View all tasks
+for task in CODING_TASKS:
+    print(f"{task['id']}: {task['prompt']}")
+    print(f"  Difficulty: {task['difficulty']}")
+    print(f"  Test cases: {len(task['test_cases'])}")
+    print()
+
+# Get a specific task
+fibonacci_task = get_task(task_id="fibonacci")
+print(fibonacci_task["prompt"])
+
+# Get task by index (for episode-based selection)
+task_for_episode_5 = get_task(index=4)  # 0-indexed
+print(f"Episode 5 task: {task_for_episode_5['id']}")
+```
+
+### Example Task Format
+
+Each task includes:
+- **Prompt**: Clear description of what to implement
+- **Test cases**: Input/expected output pairs for validation
+- **Difficulty**: easy, medium, or hard
+
+Example from the fibonacci task:
+```python
+{
+    "id": "fibonacci",
+    "prompt": "Write a Python function called `fibonacci(n)` that returns the nth Fibonacci number.",
+    "test_cases": [
+        {"input": 0, "expected": 0},
+        {"input": 1, "expected": 1},
+        {"input": 5, "expected": 5},
+        {"input": 10, "expected": 55},
+    ],
+    "difficulty": "easy"
+}
+```
+
+The agent receives the task prompt with formatted test cases and clear instructions to use the `execute_code()` tool.
+
 ## Customization
 
 ### Modify Agent Instructions

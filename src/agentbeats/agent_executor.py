@@ -400,7 +400,10 @@ class AgentBeatsExecutor(AgentExecutor):
                         )
                 else:
                     log(arguments_dict)
+                    logger.debug(f"[Tool Wrapper] Calling {tool_fn.__name__} with args={args}, kwargs={kwargs}")
                     result = tool_fn(*args, **kwargs)
+                    logger.debug(f"[Tool Wrapper] {tool_fn.__name__} returned: {repr(result)[:500]}")
+                logger.debug(f"[Tool Wrapper] Returning result from {tool_fn.__name__}")
                 return result
 
             return sync_wrapper
