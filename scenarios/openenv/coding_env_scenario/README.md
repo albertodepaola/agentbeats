@@ -366,3 +366,13 @@ Total Duration: 65.3s
 - [AgentBeats Documentation](https://github.com/agentbeats/agentbeats)
 - [OpenEnv Documentation](https://github.com/meta-pytorch/OpenEnv)
 - [OpenEnv Coding Environment](https://github.com/meta-pytorch/OpenEnv/tree/main/src/envs/coding_env)
+
+
+# actual exections
+
+## GPT-4o-mini
+
+agentbeats run_openenv_eval --agent_card scenarios/openenv/coding_env_scenario/coding_agent_card.toml   --env coding_env   --num_episodes 2   --model_type openai   --model_name gpt-4o-mini   --output_dir ./eval_results/coding_env_gpt   --docker_image coding-env:stable
+
+
+agentbeats run_openenv_eval --agent_card scenarios/openenv/coding_env_scenario/coding_agent_card.toml   --env coding_env   --num_episodes 2   --model_type google   --model_name gemini-2.5-flash   --output_dir ./eval_results/coding_env_gemini   --docker_image coding-env:stable

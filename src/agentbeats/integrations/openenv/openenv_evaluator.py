@@ -155,13 +155,16 @@ class OpenEnvEvaluator:
             episode_id = reset_result.get("episode_id", f"episode_{episode_num}")
 
             # Get task for this episode
-            from .sample_tasks import get_task, format_task_prompt
+            from .sample_tasks import get_task, format_task_prompt, get_expected_outputs
+            from .task_validator import TaskValidator
 
             # Use episode number to select task (cyclic)
             task = get_task(index=episode_num - 1)
             initial_message = format_task_prompt(task, episode_num)
+            expected_outputs = get_expected_outputs(task)
 
             logger.info(f"Episode {episode_num} task: {task['id']}")
+            logger.info(f"Expected outputs: {expected_outputs}")
             logger.info(f"Prompt length: {len(initial_message)} characters")
             logger.debug(f"Full prompt:\n{initial_message}")
 
@@ -189,11 +192,40 @@ class OpenEnvEvaluator:
 
             # Get final state after agent execution
             final_state = self.adapter.get_state()
-            total_reward = final_state.get("total_reward", 0.0)
+            env_reward = final_state.get("total_reward", 0.0)
             step_count = final_state.get("step_count", 0)
 
-            # Determine success (environment-specific logic)
-            success = total_reward > 0  # Simple heuristic
+            # Validate task completion and assign reward
+            validator = TaskValidator(base_reward=1.0, partial_credit=0.5)
+
+            # Extract the actual output from the agent's last tool call
+            actual_output = None
+            for msg in reversed(agent_chat_history):
+                if msg.get("type") == "function_call_output":
+                    output_text = msg.get("output", "")
+                    # Extract output from the response
+                    if "Output:\n" in output_text:
+                        actual_output = output_text.split("Output:\n")[1].split("\n")[0]
+                        break
+
+            logger.info(f"Extracted actual output: {actual_output}")
+
+            if actual_output:
+                task_reward = validator.validate_output(
+                    actual_output=actual_output,
+                    expected_outputs=expected_outputs,
+                    task_id=task["id"]
+                )
+            else:
+                logger.warning(f"Task {task['id']}: No output found in agent responses")
+                task_reward = 0.0
+
+            # Use task reward instead of environment reward for success determination
+            total_reward = task_reward
+            logger.info(f"Environment reward: {env_reward}, Task validation reward: {task_reward}")
+
+            # Determine success (task completed correctly)
+            success = task_reward >= validator.base_reward
 
             duration = time.time() - start_time
 

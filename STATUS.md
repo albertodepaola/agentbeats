@@ -1,9 +1,75 @@
 # OpenEnv Integration Status
 
-**Last Updated**: 2025-12-03 (ROOT CAUSE FOUND AND FIXED)
-**Status**: 🟢 FIXED - Attribute name mismatch resolved
+**Last Updated**: 2025-12-03 (THREE FIXES APPLIED - ROOT CAUSE IDENTIFIED)
+**Status**: 🟡 FIXING - Task validation system added
 
-## SOLUTION: Observation Attribute Mismatch
+## UPDATE: Third Fix - Task Validation System (IN PROGRESS)
+
+**Issue**: Rewards remained 0 even after tool outputs and metadata were working
+**Root Cause**: OpenEnv transform system only penalizes bad code (dangerous patterns, syntax errors) and rewards conciseness. It does NOT validate task correctness!
+**Fix Applied**: Created task-aware validation system in agentbeats:
+  - `task_validator.py` - Validates code output against expected results
+  - Updated `openenv_evaluator.py` - Extracts outputs and assigns rewards based on correctness
+  - Updated `sample_tasks.py` - Added helper to extract expected outputs
+**Status**: 🔧 Testing in progress
+
+### Evidence from Analysis
+
+Looking at successful execution logs:
+```json
+{
+  "output": "Execution completed.\nOutput:\n{\"0\": 0, \"1\": 1, \"5\": 5, \"10\": 55}\nReward: 0.0\n",
+  "task": "fibonacci",
+  "expected": {"0": 0, "1": 1, "5": 5, "10": 55}
+}
+```
+
+The agent:
+- ✅ Wrote correct fibonacci function
+- ✅ Executed code successfully
+- ✅ Got correct output matching all test cases
+- ❌ Received 0.0 reward because OpenEnv doesn't validate task correctness
+
+### Why OpenEnv Rewards Were Always 0.0
+
+The transform system calculates rewards as:
+
+1. **CodeSafetyTransform** (transforms.py:33-62):
+   - Checks for dangerous patterns (os, subprocess, eval, exec)
+   - If found: reward = -1.0
+   - If safe: reward = 0.0
+
+2. **CodeQualityTransform** (transforms.py:65-103):
+   - If code ≤ 100 chars: quality_score += 0.1
+   - If syntax error: quality_score += -0.2
+   - Otherwise: quality_score += 0.0
+
+For typical agent solutions:
+- Code is safe → reward = 0.0
+- Code is >100 characters → quality_score = 0.0
+- Code has valid syntax → quality_score += 0.0
+- **Final reward: 0.0**
+
+The transforms penalize bad code but don't reward correct solutions!
+
+### Solution: Task-Aware Validation
+
+Created new validation system that:
+1. Extracts actual output from agent's tool calls
+2. Compares against expected test case results
+3. Assigns rewards based on correctness:
+   - 100% correct: 1.0 reward
+   - ≥50% correct: 0.5 reward (partial credit)
+   - <50% correct: 0.0 reward
+
+**Key Files**:
+- `src/agentbeats/integrations/openenv/task_validator.py` - Validation logic
+- `src/agentbeats/integrations/openenv/openenv_evaluator.py` - Integration
+- `src/agentbeats/integrations/openenv/sample_tasks.py` - Expected outputs helper
+
+
+
+## SOLUTION 1: Observation Attribute Mismatch (COMPLETED)
 
 **ROOT CAUSE IDENTIFIED**: The code was checking for `obs.output` but CodingEnv's observation object uses `obs.stdout` instead.
 

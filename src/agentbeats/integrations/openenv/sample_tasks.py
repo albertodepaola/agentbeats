@@ -288,3 +288,36 @@ def get_task_count() -> int:
         Number of tasks
     """
     return len(CODING_TASKS)
+
+
+def get_expected_outputs(task: Dict[str, Any]) -> Dict[Any, Any]:
+    """
+    Extract expected outputs from a task for validation.
+
+    Args:
+        task: Task dictionary containing test_cases
+
+    Returns:
+        Dictionary mapping inputs to expected outputs
+
+    Example:
+        >>> task = get_task(task_id="fibonacci")
+        >>> expected = get_expected_outputs(task)
+        >>> expected[0]
+        0
+        >>> expected[10]
+        55
+    """
+    expected_outputs = {}
+    for tc in task["test_cases"]:
+        input_val = tc["input"]
+        # For tuple inputs (like binary_search), use the first element as key
+        # since the code should return a dict with first arg as keys
+        if isinstance(input_val, tuple):
+            # For functions with multiple args, we expect the code to handle them specially
+            # For now, just use the tuple as a string key
+            key = str(input_val)
+        else:
+            key = input_val
+        expected_outputs[key] = tc["expected"]
+    return expected_outputs
