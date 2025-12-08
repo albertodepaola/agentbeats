@@ -155,16 +155,13 @@ class OpenEnvEvaluator:
             episode_id = reset_result.get("episode_id", f"episode_{episode_num}")
 
             # Get task for this episode
-            from .sample_tasks import get_task, format_task_prompt, get_expected_outputs
-            from .task_validator import TaskValidator
+            from .sample_tasks import format_task_prompt, get_task
 
             # Use episode number to select task (cyclic)
             task = get_task(index=episode_num - 1)
             initial_message = format_task_prompt(task, episode_num)
-            expected_outputs = get_expected_outputs(task)
 
             logger.info(f"Episode {episode_num} task: {task['id']}")
-            logger.info(f"Expected outputs: {expected_outputs}")
             logger.info(f"Prompt length: {len(initial_message)} characters")
             logger.debug(f"Full prompt:\n{initial_message}")
 
@@ -175,7 +172,7 @@ class OpenEnvEvaluator:
                     self._message = message
                     self.current_task = None
 
-                def get_user_input(self, delimiter: str = '\n') -> str:
+                def get_user_input(self, delimiter: str = "\n") -> str:
                     return self._message
 
             mock_context = SimpleContext(initial_message)
@@ -185,47 +182,26 @@ class OpenEnvEvaluator:
             agent_response = await agent_executor.invoke_agent(mock_context)
 
             # Capture the agent's conversation history
-            agent_chat_history = agent_executor.chat_history if hasattr(agent_executor, 'chat_history') else []
+            agent_chat_history = (
+                agent_executor.chat_history
+                if hasattr(agent_executor, "chat_history")
+                else []
+            )
             logger.info(f"Agent response: {agent_response}")
-            logger.info(f"Agent chat history length: {len(agent_chat_history)} messages")
+            logger.info(
+                f"Agent chat history length: {len(agent_chat_history)} messages"
+            )
             logger.debug(f"Full chat history: {agent_chat_history}")
 
-            # Get final state after agent execution
+            # Get final state after agent execution - use environment's reward
             final_state = self.adapter.get_state()
-            env_reward = final_state.get("total_reward", 0.0)
+            total_reward = final_state.get("total_reward", 0.0)
             step_count = final_state.get("step_count", 0)
 
-            # Validate task completion and assign reward
-            validator = TaskValidator(base_reward=1.0, partial_credit=0.5)
+            logger.info(f"Environment reward: {total_reward}")
 
-            # Extract the actual output from the agent's last tool call
-            actual_output = None
-            for msg in reversed(agent_chat_history):
-                if msg.get("type") == "function_call_output":
-                    output_text = msg.get("output", "")
-                    # Extract output from the response
-                    if "Output:\n" in output_text:
-                        actual_output = output_text.split("Output:\n")[1].split("\n")[0]
-                        break
-
-            logger.info(f"Extracted actual output: {actual_output}")
-
-            if actual_output:
-                task_reward = validator.validate_output(
-                    actual_output=actual_output,
-                    expected_outputs=expected_outputs,
-                    task_id=task["id"]
-                )
-            else:
-                logger.warning(f"Task {task['id']}: No output found in agent responses")
-                task_reward = 0.0
-
-            # Use task reward instead of environment reward for success determination
-            total_reward = task_reward
-            logger.info(f"Environment reward: {env_reward}, Task validation reward: {task_reward}")
-
-            # Determine success (task completed correctly)
-            success = task_reward >= validator.base_reward
+            # Determine success (reward > 0 indicates correct solution)
+            success = total_reward > 0.0
 
             duration = time.time() - start_time
 
@@ -259,6 +235,7 @@ class OpenEnvEvaluator:
             duration = time.time() - start_time
             logger.error(f"Episode {episode_num} failed: {e}")
             import traceback
+
             traceback.print_exc()
 
             return EpisodeResult(
@@ -298,12 +275,16 @@ class OpenEnvEvaluator:
             return loop.run_until_complete(future)
         except RuntimeError:
             # No running loop, create one
-            return asyncio.run(
-                self.run_episode_async(episode_num, agent_executor)
-            )
+            return asyncio.run(self.run_episode_async(episode_num, agent_executor))
 
-    def run(self, agent_card_json: Dict[str, Any], model_type: str, model_name: str,
-            tool_list: List[Any], mcp_url_list: List[str]) -> EvaluationResults:
+    def run(
+        self,
+        agent_card_json: Dict[str, Any],
+        model_type: str,
+        model_name: str,
+        tool_list: List[Any],
+        mcp_url_list: List[str],
+    ) -> EvaluationResults:
         """
         Run the full evaluation.
 

@@ -4,11 +4,12 @@
 AgentBeats SDK implementation for the AgentBeats platform.
 """
 
-import os
-import json
-import tomllib
-import uvicorn
 import functools
+import json
+import os
+import tomllib
+
+import uvicorn
 from typing import *
 import inspect
 import logging
@@ -16,35 +17,35 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+from a2a.server.agent_execution import AgentExecutor, RequestContext
+
+from a2a.server.apps import A2AStarletteApplication
+from a2a.server.events import EventQueue
+from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks import InMemoryTaskStore, TaskUpdater
+from a2a.types import AgentCard, Part, TaskState, TextPart
+from a2a.utils import new_agent_text_message, new_task
 from agents import (
     Agent,
-    Runner,
     function_tool,
     Model,
     ModelProvider,
     OpenAIChatCompletionsModel,
-    set_tracing_disabled,
     RunHooks,
+    Runner,
+    set_tracing_disabled,
 )
 from agents.mcp import MCPServerSse
 from openai import AsyncOpenAI
 
-from a2a.server.apps import A2AStarletteApplication
-from a2a.server.tasks import TaskUpdater, InMemoryTaskStore
-from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.events import EventQueue
-from a2a.utils import new_task, new_agent_text_message
-from a2a.types import Part, TextPart, TaskState, AgentCard
-
 from .logging import (
-    update_battle_process,
-    set_battle_context,
+    get_agent_id,
+    get_backend_url,
     get_battle_context,
     get_battle_id,
-    get_agent_id,
     get_frontend_agent_name,
-    get_backend_url,
+    set_battle_context,
+    update_battle_process,
 )
 
 # class AgentBeatsHook(RunHooks):
@@ -88,9 +89,7 @@ def create_agent(
 
     # openai agents, e.g. "o4-mini"
     if model_type == "openai":
-        OPENAI_API_KEY = os.getenv(
-            "OPENAI_API_KEY"
-        ).strip()  # in case of empty \n
+        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY").strip()  # in case of empty \n
         if not OPENAI_API_KEY:
             raise ValueError("OPENAI_API_KEY is not set")
 
@@ -99,11 +98,10 @@ def create_agent(
 
     # google/gemini agents via OpenAI-compatible API, e.g. "gemini-1.5-flash"
     elif model_type == "google":
-        GOOGLE_API_KEY = os.getenv(
-            "GOOGLE_API_KEY"
-        ).strip()  # in case of empty \n
+        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
         if not GOOGLE_API_KEY:
             raise ValueError("GOOGLE_API_KEY is not set")
+        GOOGLE_API_KEY = GOOGLE_API_KEY.strip()  # in case of empty \n
 
         print("[AgentBeats] Using Google Gemini model:", model_name)
         set_tracing_disabled(True)  # Disable tracing for Google models
@@ -112,14 +110,12 @@ def create_agent(
         # Google's OpenAI-compatible endpoint
         google_client = AsyncOpenAI(
             base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
-            api_key=GOOGLE_API_KEY
+            api_key=GOOGLE_API_KEY,
         )
         google_model_provider = GoogleModelProvider()
         return Agent(
             **agent_args,
-            model=google_model_provider.get_model(
-                model_name, google_client
-            ),
+            model=google_model_provider.get_model(model_name, google_client),
         )
 
     # openrouter agents, e.g. "anthropic/claude-3.5-sonnet"
@@ -139,9 +135,7 @@ def create_agent(
         openrouter_model_provider = OpenRouterModelProvider()
         return Agent(
             **agent_args,
-            model=openrouter_model_provider.get_model(
-                model_name, openrouter_client
-            ),
+            model=openrouter_model_provider.get_model(model_name, openrouter_client),
         )
 
     # no matching agents
@@ -152,20 +146,14 @@ def create_agent(
 class GoogleModelProvider(ModelProvider):
     """Provider for Google Gemini models via OpenAI-compatible API."""
 
-    def get_model(
-        self, model_name: str, google_client: AsyncOpenAI
-    ) -> Model:
-        return OpenAIChatCompletionsModel(
-            model=model_name, openai_client=google_client
-        )
+    def get_model(self, model_name: str, google_client: AsyncOpenAI) -> Model:
+        return OpenAIChatCompletionsModel(model=model_name, openai_client=google_client)
 
 
 class OpenRouterModelProvider(ModelProvider):
     """Provider for OpenRouter models, allowing dynamic model in openai-agents."""
 
-    def get_model(
-        self, model_name: str, openrouter_client: AsyncOpenAI
-    ) -> Model:
+    def get_model(self, model_name: str, openrouter_client: AsyncOpenAI) -> Model:
         return OpenAIChatCompletionsModel(
             model=model_name, openai_client=openrouter_client
         )
@@ -296,16 +284,10 @@ class AgentBeatsExecutor(AgentExecutor):
         self.AGENT_PROMPT = str(agent_card_json["description"])
         self.AGENT_PROMPT += "\n\n"
         if "skills" in agent_card_json:
-            self.AGENT_PROMPT += (
-                "Here are your skills defined in your agent card:\n"
-            )
-            self.AGENT_PROMPT += json.dumps(
-                agent_card_json["skills"], indent=2
-            )
+            self.AGENT_PROMPT += "Here are your skills defined in your agent card:\n"
+            self.AGENT_PROMPT += json.dumps(agent_card_json["skills"], indent=2)
             self.AGENT_PROMPT += "\n\n"
-            self.AGENT_PROMPT += (
-                "You should use these skills to help the user.\n"
-            )
+            self.AGENT_PROMPT += "You should use these skills to help the user.\n"
         self.AGENT_PROMPT += "Above is your system prompt. Please respond accordingly. The below will be your user input: \n"
 
         self.main_agent = None
@@ -328,8 +310,7 @@ class AgentBeatsExecutor(AgentExecutor):
                     message=f"Calling tool {tool_fn.__name__}",
                     detail=params_json,
                     reported_by=(
-                        get_frontend_agent_name()
-                        + " (agentbeats sdk toolcall hooks)"
+                        get_frontend_agent_name() + " (agentbeats sdk toolcall hooks)"
                     ),
                 )
             except Exception:
@@ -343,9 +324,7 @@ class AgentBeatsExecutor(AgentExecutor):
                 bound = sig.bind(*args, **kwargs)
                 bound.apply_defaults()
                 # bound.arguments is an OrderedDict of param_name -> value
-                json_body = json.loads(
-                    json.dumps(bound.arguments, default=str)
-                )
+                json_body = json.loads(json.dumps(bound.arguments, default=str))
                 log(json_body)
                 return await tool_fn(*args, **kwargs)
 
@@ -357,9 +336,7 @@ class AgentBeatsExecutor(AgentExecutor):
                 sig = inspect.signature(tool_fn)
                 bound = sig.bind(*args, **kwargs)
                 bound.apply_defaults()
-                arguments_dict = json.loads(
-                    json.dumps(bound.arguments, default=str)
-                )
+                arguments_dict = json.loads(json.dumps(bound.arguments, default=str))
 
                 if "terminal_command" in arguments_dict:
                     result = tool_fn(*args, **kwargs)
@@ -400,9 +377,13 @@ class AgentBeatsExecutor(AgentExecutor):
                         )
                 else:
                     log(arguments_dict)
-                    logger.debug(f"[Tool Wrapper] Calling {tool_fn.__name__} with args={args}, kwargs={kwargs}")
+                    logger.debug(
+                        f"[Tool Wrapper] Calling {tool_fn.__name__} with args={args}, kwargs={kwargs}"
+                    )
                     result = tool_fn(*args, **kwargs)
-                    logger.debug(f"[Tool Wrapper] {tool_fn.__name__} returned: {repr(result)[:500]}")
+                    logger.debug(
+                        f"[Tool Wrapper] {tool_fn.__name__} returned: {repr(result)[:500]}"
+                    )
                 logger.debug(f"[Tool Wrapper] Returning result from {tool_fn.__name__}")
                 return result
 
@@ -412,7 +393,9 @@ class AgentBeatsExecutor(AgentExecutor):
         """Initialize the main agent with the provided tools and MCP servers."""
 
         logger.info(f"Initializing agent with {len(self.tool_list)} tools")
-        logger.debug(f"Tool list: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in self.tool_list]}")
+        logger.debug(
+            f"Tool list: {[t.__name__ if hasattr(t, '__name__') else str(t) for t in self.tool_list]}"
+        )
 
         # Register tools
         for tool_index in range(len(self.tool_list)):
@@ -468,9 +451,11 @@ class AgentBeatsExecutor(AgentExecutor):
         logger.debug(f"Query context: {json.dumps(query_ctx, indent=2)}")
 
         # Log tools available to agent
-        if self.main_agent and hasattr(self.main_agent, 'tools'):
+        if self.main_agent and hasattr(self.main_agent, "tools"):
             logger.info(f"Agent has {len(self.main_agent.tools)} tools available")
-            tool_names = [t.name if hasattr(t, 'name') else str(t) for t in self.main_agent.tools]
+            tool_names = [
+                t.name if hasattr(t, "name") else str(t) for t in self.main_agent.tools
+            ]
             logger.info(f"Tool names: {tool_names}")
 
         result = await Runner.run(self.main_agent, query_ctx, max_turns=30)
@@ -479,7 +464,9 @@ class AgentBeatsExecutor(AgentExecutor):
 
         # print agent output
         print(f"[AgentBeatsExecutor] Agent output: {result.final_output}")
-        logger.info(f"Agent completed with {len(result.to_input_list())} messages in history")
+        logger.info(
+            f"Agent completed with {len(result.to_input_list())} messages in history"
+        )
 
         return result.final_output
 
@@ -522,9 +509,7 @@ class AgentBeatsExecutor(AgentExecutor):
                 get_battle_context(),
             )
 
-            reply_text = (
-                f"Agent {get_frontend_agent_name()} is ready to battle!"
-            )
+            reply_text = f"Agent {get_frontend_agent_name()} is ready to battle!"
 
         # if battle_info is not provided (normal conversation),
         # use the agent output as the reply text
@@ -538,9 +523,7 @@ class AgentBeatsExecutor(AgentExecutor):
         )
         await updater.complete()
 
-    async def cancel(
-        self, context: RequestContext, event_queue: EventQueue
-    ) -> None:
+    async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         """Cancel the current task (not implemented yet)."""
         raise NotImplementedError("cancel not supported")
 
