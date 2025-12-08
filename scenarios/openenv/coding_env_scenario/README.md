@@ -70,7 +70,6 @@ Get your API key from [Google AI Studio](https://aistudio.google.com/app/apikey)
 
 ```bash
 export GOOGLE_API_KEY="your-google-api-key"
-export GOOGLE_API_KEY="AIzaSyC_v96rkDExSlPQox8W06ejqHXBR-swZlU"
 
 ```
 
