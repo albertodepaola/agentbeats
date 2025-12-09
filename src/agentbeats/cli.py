@@ -918,7 +918,7 @@ def main():
     )
 
     # check command
-    check_parser = sub_parser.add_parser(
+    sub_parser.add_parser(
         "check", help="Check AgentBeats environment setup"
     )
 
