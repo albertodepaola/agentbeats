@@ -86,7 +86,7 @@ agentbeats run_openenv_eval \
 ```
 
 
-### 4. Comparison Example
+### 3. Comparison Example
 
 Compare performance across models:
 
