@@ -367,7 +367,7 @@ Total Duration: 65.3s
 - [OpenEnv Coding Environment](https://github.com/meta-pytorch/OpenEnv/tree/main/src/envs/coding_env)
 
 
-# actual exections
+# actual executions
 
 ## GPT-4o-mini
 
