@@ -641,7 +641,7 @@ def _run_openenv_eval(
         print("=" * 60 + "\n")
 
         # Pass parameters instead of pre-created executor
-        results = evaluator.run(
+        evaluator.run(
             agent_card_json=agent_card_json,
             model_type=model_type,
             model_name=model_name,
